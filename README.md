@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # See2world 🌍
 
 Application de Watch Party — regardez des films ensemble à distance en temps réel.
@@ -24,3 +25,6 @@ cd client && npm run electron:dev
 - Socket.io (signalisation temps réel)
 - React + Vite + Tailwind CSS v4
 - Electron (app Windows)
+=======
+# See2world
+>>>>>>> 65adce3219c456a56cd6987db93ce172e3f509c0
