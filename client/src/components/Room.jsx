@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebRTC } from '../hooks/useWebRTC';
-import { Monitor, Camera, CameraOff, Mic, MicOff, VideoOff, MessageSquare, Send, Copy, LogOut, Volume2, VolumeX, EyeOff, Eye, Globe, Maximize, Minus, Square, X } from 'lucide-react';
+import { Monitor, Camera, CameraOff, Mic, MicOff, VideoOff, MessageSquare, Send, Copy, LogOut, Volume2, VolumeX, EyeOff, Eye, Globe, Maximize, Minus, Square, X, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
 
@@ -44,6 +44,103 @@ export default function Room() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [copyToast, setCopyToast] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // New browser history, webview ref, and warning states
+  const [showWarningBanner, setShowWarningBanner] = useState(true);
+  const [browserHistory, setBrowserHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const webviewRef = useRef(null);
+
+  const navigateToUrl = (url) => {
+    let formattedUrl = url.trim();
+    if (formattedUrl && !/^https?:\/\//i.test(formattedUrl)) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+    
+    const newHistory = browserHistory.slice(0, historyIndex + 1);
+    newHistory.push(formattedUrl);
+    setBrowserHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+    
+    setCurrentUrl(formattedUrl);
+    setBrowserUrl(formattedUrl);
+  };
+
+  const handleBrowserBack = () => {
+    if (ipcRenderer && webviewRef.current) {
+      try {
+        if (webviewRef.current.canGoBack()) {
+          webviewRef.current.goBack();
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      const prevUrl = browserHistory[prevIndex];
+      setCurrentUrl(prevUrl);
+      setBrowserUrl(prevUrl);
+    }
+  };
+
+  const handleBrowserForward = () => {
+    if (ipcRenderer && webviewRef.current) {
+      try {
+        if (webviewRef.current.canGoForward()) {
+          webviewRef.current.goForward();
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    
+    if (historyIndex < browserHistory.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      const nextUrl = browserHistory[nextIndex];
+      setCurrentUrl(nextUrl);
+      setBrowserUrl(nextUrl);
+    }
+  };
+
+  const handleBrowserReload = () => {
+    if (ipcRenderer && webviewRef.current) {
+      try {
+        webviewRef.current.reload();
+        return;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    
+    const temp = currentUrl;
+    setCurrentUrl('');
+    setTimeout(() => setCurrentUrl(temp), 50);
+  };
+
+  // Sync address bar input with Electron webview actual navigation changes
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+
+    const handleNavigate = (e) => {
+      setBrowserUrl(e.url);
+      setCurrentUrl(e.url);
+    };
+
+    webview.addEventListener('did-navigate', handleNavigate);
+    webview.addEventListener('did-navigate-in-page', handleNavigate);
+
+    return () => {
+      webview.removeEventListener('did-navigate', handleNavigate);
+      webview.removeEventListener('did-navigate-in-page', handleNavigate);
+    };
+  }, [currentUrl]);
   
   const {
     peers,
@@ -192,16 +289,36 @@ export default function Room() {
           
           {/* Browser Navigation Bar */}
           {isBrowserMode && showAddressBar && (
-            <div className="h-12 bg-gray-800 rounded-lg flex items-center px-4 gap-4 shrink-0 shadow-md">
+            <div className="h-12 bg-gray-800 rounded-lg flex items-center px-4 gap-3 shrink-0 shadow-md">
+              <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
+                <button 
+                  onClick={handleBrowserBack}
+                  disabled={ipcRenderer ? false : historyIndex <= 0}
+                  className="p-1.5 rounded hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent text-gray-300 hover:text-white transition-colors"
+                  title="Retour"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={handleBrowserForward}
+                  disabled={ipcRenderer ? false : historyIndex >= browserHistory.length - 1}
+                  className="p-1.5 rounded hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent text-gray-300 hover:text-white transition-colors"
+                  title="Suivant"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={handleBrowserReload}
+                  className="p-1.5 rounded hover:bg-gray-700 text-gray-300 hover:text-white transition-colors"
+                  title="Actualiser"
+                >
+                  <RotateCw className="w-4 h-4" />
+                </button>
+              </div>
               <form 
                 onSubmit={(e) => { 
                   e.preventDefault(); 
-                  let formattedUrl = browserUrl.trim();
-                  if (formattedUrl && !/^https?:\/\//i.test(formattedUrl)) {
-                    formattedUrl = `https://${formattedUrl}`;
-                  }
-                  setCurrentUrl(formattedUrl); 
-                  setBrowserUrl(formattedUrl);
+                  navigateToUrl(browserUrl);
                   setShowAddressBar(false);
                 }}
                 className="flex-1 flex gap-2"
@@ -233,13 +350,18 @@ export default function Room() {
              
              {isBrowserMode && currentUrl ? (
                <div className="w-full h-full flex flex-col">
-                 {!ipcRenderer && (
-                   <div className="bg-yellow-600/95 text-white px-4 py-1 text-[11px] text-center font-medium shrink-0 flex items-center justify-center gap-2 shadow-inner">
-                     ⚠️ Version Web : certains sites bloquent l'affichage par sécurité (X-Frame-Options). Utilisez l'app Desktop pour tout débloquer !
+                 {!ipcRenderer && showWarningBanner && (
+                   <div className="bg-yellow-600/95 text-white px-4 py-1.5 text-[11px] text-center font-medium shrink-0 flex items-center justify-between gap-2 shadow-inner">
+                     <span className="flex-1 text-center">
+                       ⚠️ Version Web : certains sites bloquent l'affichage par sécurité (X-Frame-Options). Utilisez l'app Desktop pour tout débloquer !
+                     </span>
+                     <button onClick={() => setShowWarningBanner(false)} className="hover:bg-yellow-700 p-0.5 rounded transition-colors shrink-0 text-white" title="Fermer">
+                       <X className="w-3.5 h-3.5" />
+                     </button>
                    </div>
                  )}
                  {ipcRenderer ? (
-                   <webview src={currentUrl} className="w-full h-full border-0 bg-white" allowpopups="true" />
+                   <webview ref={webviewRef} src={currentUrl} className="w-full h-full border-0 bg-white" allowpopups="true" />
                  ) : (
                    <iframe 
                      src={currentUrl} 

@@ -20,6 +20,12 @@ export const useWebRTC = (roomId) => {
 
   const socketRef = useRef();
   const peersRef = useRef({});
+  const localStreamRef = useRef(localStream);
+
+  // Sync the ref with the state so we always have the latest localStream
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
 
   useEffect(() => {
     const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
@@ -35,9 +41,9 @@ export const useWebRTC = (roomId) => {
       const peerConnection = createPeerConnection(userId);
       peersRef.current[userId] = peerConnection;
 
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStream);
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStreamRef.current);
         });
       }
 
@@ -54,9 +60,9 @@ export const useWebRTC = (roomId) => {
       const peerConnection = createPeerConnection(payload.caller);
       peersRef.current[payload.caller] = peerConnection;
 
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStream);
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStreamRef.current);
         });
       }
 
@@ -109,7 +115,7 @@ export const useWebRTC = (roomId) => {
       socketRef.current.disconnect();
       Object.values(peersRef.current).forEach(peer => peer.close());
     };
-  }, [roomId, localStream]);
+  }, [roomId]);
 
   const createPeerConnection = (userId) => {
     const peerConnection = new RTCPeerConnection(ICE_SERVERS);
