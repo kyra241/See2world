@@ -49,6 +49,12 @@ io.on('connection', (socket) => {
     socket.to(payload.roomId).emit('chat-message', payload);
   });
 
+  // Browser synchronization
+  socket.on('browser-sync', (payload) => {
+    // payload: { roomId: string, isBrowserMode: boolean, currentUrl: string }
+    socket.to(payload.roomId).emit('browser-sync', payload);
+  });
+
   socket.on('disconnecting', () => {
     // Notify all rooms the user is in
     for (const room of socket.rooms) {
