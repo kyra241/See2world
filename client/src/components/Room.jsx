@@ -196,7 +196,12 @@ export default function Room() {
               <form 
                 onSubmit={(e) => { 
                   e.preventDefault(); 
-                  setCurrentUrl(browserUrl); 
+                  let formattedUrl = browserUrl.trim();
+                  if (formattedUrl && !/^https?:\/\//i.test(formattedUrl)) {
+                    formattedUrl = `https://${formattedUrl}`;
+                  }
+                  setCurrentUrl(formattedUrl); 
+                  setBrowserUrl(formattedUrl);
                   setShowAddressBar(false);
                 }}
                 className="flex-1 flex gap-2"
@@ -206,7 +211,7 @@ export default function Room() {
                   type="text"
                   value={browserUrl}
                   onChange={(e) => setBrowserUrl(e.target.value)}
-                  placeholder="Entrez une URL (ex: https://duckduckgo.com)"
+                  placeholder="Entrez une URL (ex: duckduckgo.com ou https://example.com)"
                   className="flex-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                 />
                 <button type="submit" className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-medium">
@@ -227,7 +232,23 @@ export default function Room() {
              )}
              
              {isBrowserMode && currentUrl ? (
-               <webview src={currentUrl} className="w-full h-full border-0 bg-white" allowpopups="true" />
+               <div className="w-full h-full flex flex-col">
+                 {!ipcRenderer && (
+                   <div className="bg-yellow-600/95 text-white px-4 py-1 text-[11px] text-center font-medium shrink-0 flex items-center justify-center gap-2 shadow-inner">
+                     ⚠️ Version Web : certains sites bloquent l'affichage par sécurité (X-Frame-Options). Utilisez l'app Desktop pour tout débloquer !
+                   </div>
+                 )}
+                 {ipcRenderer ? (
+                   <webview src={currentUrl} className="w-full h-full border-0 bg-white" allowpopups="true" />
+                 ) : (
+                   <iframe 
+                     src={currentUrl} 
+                     className="w-full h-full border-0 bg-white" 
+                     title="Navigateur Partagé"
+                     sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                   />
+                 )}
+               </div>
              ) : mainStream ? (
                <VideoPlayer stream={mainStream} isLocal={mainIsLocal} volume={globalVolume} isMainStage={true} isScreen={isScreenSharing && mainIsLocal} />
              ) : (
