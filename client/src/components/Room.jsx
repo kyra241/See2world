@@ -173,6 +173,7 @@ export default function Room() {
       setCurrentUrl(browserState.currentUrl);
       if (browserState.currentUrl) {
         setBrowserUrl(browserState.currentUrl);
+        setShowAddressBar(false); // Masquer la barre d'adresse pour les participants pour le visionnage plein écran !
       }
     }
   }, [browserState]);

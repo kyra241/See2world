@@ -112,6 +112,8 @@ export const useWebRTC = (roomId) => {
     });
 
     socketRef.current.on('chat-message', (payload) => {
+      // Éviter les doublons de messages pour l'expéditeur
+      if (payload.sender === socketRef.current.id) return;
       setMessages((prev) => [...prev, payload]);
     });
 
