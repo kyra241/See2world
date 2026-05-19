@@ -28,7 +28,8 @@ export const useWebRTC = (roomId) => {
   }, [localStream]);
 
   useEffect(() => {
-    const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+    const SERVER_URL = import.meta.env.VITE_SERVER_URL || 
+      (import.meta.env.PROD ? 'https://see2world.bonto.run' : 'http://localhost:3001');
     socketRef.current = io(SERVER_URL);
 
     socketRef.current.on('connect', () => {
