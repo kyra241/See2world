@@ -247,10 +247,15 @@ export const useWebRTC = (roomId) => {
     if (!socketRef.current) return;
     const payload = {
       roomId,
-      sender: socketRef.current.id,
+      sender: socketRef.current.id || 'me',
       text,
       timestamp: Date.now()
     };
+    
+    // Afficher localement immédiatement pour le destinataire
+    setMessages((prev) => [...prev, payload]);
+    
+    // Envoyer aux autres participants de la salle
     socketRef.current.emit('chat-message', payload);
   };
 

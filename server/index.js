@@ -46,7 +46,7 @@ io.on('connection', (socket) => {
   // Chat message
   socket.on('chat-message', (payload) => {
     // payload: { roomId: string, sender: string, text: string, timestamp: number }
-    io.to(payload.roomId).emit('chat-message', payload);
+    socket.to(payload.roomId).emit('chat-message', payload);
   });
 
   socket.on('disconnecting', () => {
