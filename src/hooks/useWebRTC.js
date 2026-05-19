@@ -17,6 +17,9 @@ export const useWebRTC = (roomId) => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  
+  // State for browser synchronization
+  const [browserState, setBrowserState] = useState({ isBrowserMode: false, currentUrl: '' });
 
   const socketRef = useRef();
   const peersRef = useRef({});
@@ -110,6 +113,13 @@ export const useWebRTC = (roomId) => {
 
     socketRef.current.on('chat-message', (payload) => {
       setMessages((prev) => [...prev, payload]);
+    });
+
+    socketRef.current.on('browser-sync', (payload) => {
+      setBrowserState({
+        isBrowserMode: payload.isBrowserMode,
+        currentUrl: payload.currentUrl
+      });
     });
 
     return () => {
@@ -260,6 +270,17 @@ export const useWebRTC = (roomId) => {
     socketRef.current.emit('chat-message', payload);
   };
 
+  const syncBrowser = (isBrowserMode, currentUrl) => {
+    setBrowserState({ isBrowserMode, currentUrl });
+    if (socketRef.current) {
+      socketRef.current.emit('browser-sync', {
+        roomId,
+        isBrowserMode,
+        currentUrl
+      });
+    }
+  };
+
   return {
     peers,
     localStream,
@@ -272,6 +293,8 @@ export const useWebRTC = (roomId) => {
     isScreenSharing,
     messages,
     sendMessage,
-    socketId
+    socketId,
+    browserState,
+    syncBrowser
   };
 };

@@ -64,6 +64,7 @@ export default function Room() {
     
     setCurrentUrl(formattedUrl);
     setBrowserUrl(formattedUrl);
+    syncBrowser(isBrowserMode, formattedUrl);
   };
 
   const handleBrowserBack = () => {
@@ -84,6 +85,7 @@ export default function Room() {
       const prevUrl = browserHistory[prevIndex];
       setCurrentUrl(prevUrl);
       setBrowserUrl(prevUrl);
+      syncBrowser(isBrowserMode, prevUrl);
     }
   };
 
@@ -105,6 +107,7 @@ export default function Room() {
       const nextUrl = browserHistory[nextIndex];
       setCurrentUrl(nextUrl);
       setBrowserUrl(nextUrl);
+      syncBrowser(isBrowserMode, nextUrl);
     }
   };
 
@@ -120,7 +123,10 @@ export default function Room() {
     
     const temp = currentUrl;
     setCurrentUrl('');
-    setTimeout(() => setCurrentUrl(temp), 50);
+    setTimeout(() => {
+      setCurrentUrl(temp);
+      syncBrowser(isBrowserMode, temp);
+    }, 50);
   };
 
   // Sync address bar input with Electron webview actual navigation changes
@@ -131,6 +137,7 @@ export default function Room() {
     const handleNavigate = (e) => {
       setBrowserUrl(e.url);
       setCurrentUrl(e.url);
+      syncBrowser(isBrowserMode, e.url);
     };
 
     webview.addEventListener('did-navigate', handleNavigate);
@@ -154,8 +161,21 @@ export default function Room() {
     isScreenSharing,
     messages,
     sendMessage,
-    socketId
+    socketId,
+    browserState,
+    syncBrowser
   } = useWebRTC(roomId);
+
+  // Sync local browser states when receiving updates from other participants
+  useEffect(() => {
+    if (browserState) {
+      setIsBrowserMode(browserState.isBrowserMode);
+      setCurrentUrl(browserState.currentUrl);
+      if (browserState.currentUrl) {
+        setBrowserUrl(browserState.currentUrl);
+      }
+    }
+  }, [browserState]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomId);
@@ -491,7 +511,11 @@ export default function Room() {
           </button>
 
           <button 
-            onClick={() => setIsBrowserMode(!isBrowserMode)}
+            onClick={() => {
+              const nextMode = !isBrowserMode;
+              setIsBrowserMode(nextMode);
+              syncBrowser(nextMode, currentUrl);
+            }}
             className={`p-4 rounded-full transition-colors shadow-lg ${isBrowserMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
             title={isBrowserMode ? "Fermer le navigateur" : "Ouvrir un navigateur interne"}
           >
