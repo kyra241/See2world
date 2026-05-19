@@ -244,7 +244,7 @@ export default function Room() {
 
       {/* Header (Title Bar) */}
       <header className="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between shrink-0 z-20 select-none" style={{ WebkitAppRegion: 'drag' }}>
-        <div className="flex items-center gap-4 px-4" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="flex items-center gap-3 px-4" style={{ WebkitAppRegion: 'no-drag' }}>
           <h1 className="text-xl font-bold text-white tracking-tight">See2world</h1>
           <button
             onClick={() => setShowShareModal(true)}
@@ -254,6 +254,12 @@ export default function Room() {
             <span className="text-blue-400 font-bold tracking-wider">{roomId}</span>
             <Copy className="w-4 h-4 text-gray-400" />
           </button>
+          
+          {/* Live Participant Count Pill */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-900 border border-gray-700 rounded-md text-xs text-gray-300 font-semibold shadow-inner">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+            <span>{Object.keys(peers).length + 1} participant{Object.keys(peers).length + 1 > 1 ? 's' : ''}</span>
+          </div>
         </div>
         
         <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' }}>
