@@ -21,17 +21,33 @@ const rooms = new Map();
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('join-room', (roomId) => {
+  socket.on('join-room', (data) => {
+    let roomId, isCreator;
+    if (data && typeof data === 'object') {
+      roomId = data.roomId;
+      isCreator = !!data.isCreator;
+    } else {
+      roomId = data;
+      isCreator = false;
+    }
+
     socket.join(roomId);
 
     // Get active sockets in the room from the socket.io adapter
     const activeSockets = io.sockets.adapter.rooms.get(roomId);
     const participants = activeSockets ? Array.from(activeSockets) : [socket.id];
 
-    // If the room doesn't exist in our map or the host is no longer in the room, assign a new host
+    // If the room doesn't exist in our map, assign the joining socket as the host
     if (!rooms.has(roomId)) {
       rooms.set(roomId, { hostId: socket.id });
+    } else {
+      const room = rooms.get(roomId);
+      // If the creator joins and the current host is no longer in the room, reassign to creator
+      if (isCreator && !participants.includes(room.hostId)) {
+        room.hostId = socket.id;
+      }
     }
+    
     const room = rooms.get(roomId);
 
     // Verify if the current host is actually in the room, else fallback to the first active socket
@@ -39,10 +55,15 @@ io.on('connection', (socket) => {
       room.hostId = participants[0] || socket.id;
     }
 
+    // Force host status if the creator is the only one in the room
+    if (isCreator && participants.length === 1) {
+      room.hostId = socket.id;
+    }
+
     const isHost = room.hostId === socket.id;
     const participantCount = participants.length;
 
-    console.log(`User ${socket.id} joined room ${roomId} (host: ${room.hostId}, isHost: ${isHost}, count: ${participantCount})`);
+    console.log(`User ${socket.id} joined room ${roomId} (host: ${room.hostId}, isHost: ${isHost}, count: ${participantCount}, isCreator: ${isCreator})`);
 
     // Send room-info to the joining user
     socket.emit('room-info', {
@@ -87,8 +108,8 @@ io.on('connection', (socket) => {
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue;
 
-      // Check on the next tick so that the socket has actually finished leaving the room
-      process.nextTick(() => {
+      // Check after a small delay so that the socket has actually finished leaving the room
+      setTimeout(() => {
         const activeSockets = io.sockets.adapter.rooms.get(roomId);
         if (!activeSockets || activeSockets.size === 0) {
           rooms.delete(roomId);
@@ -109,7 +130,7 @@ io.on('connection', (socket) => {
           const participantCount = participants.length;
           io.to(roomId).emit('room-count', { participantCount });
         }
-      });
+      }, 100);
 
       // Notify other peers in the room immediately to tear down WebRTC connection
       socket.to(roomId).emit('user-disconnected', socket.id);

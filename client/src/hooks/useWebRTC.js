@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import io from 'socket.io-client';
 
+const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
+
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -42,7 +44,15 @@ export const useWebRTC = (roomId, onNotification) => {
     socketRef.current.on('connect', () => {
       console.log('Connected to signaling server');
       setSocketId(socketRef.current.id);
-      socketRef.current.emit('join-room', roomId);
+      
+      // Parse query params from hash router or search query
+      const hashParts = window.location.hash.split('?');
+      const queryString = hashParts[1] || window.location.search;
+      const queryParams = new URLSearchParams(queryString);
+      const isCreator = queryParams.get('host') === 'true';
+      
+      console.log(`Joining room ${roomId} (isCreator: ${isCreator})`);
+      socketRef.current.emit('join-room', { roomId, isCreator });
     });
 
     socketRef.current.on('room-info', (data) => {
@@ -290,9 +300,33 @@ export const useWebRTC = (roomId, onNotification) => {
       stopMedia();
     } else {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
+        let stream;
+        if (ipcRenderer) {
+          console.log("Electron environment detected, using automatic window capture...");
+          const sourceId = await ipcRenderer.invoke('get-self-source-id');
+          if (!sourceId) {
+            throw new Error("Impossible de trouver la source de capture de l'application.");
+          }
+          
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId,
+                minWidth: 1280,
+                maxWidth: 1920,
+                minHeight: 720,
+                maxHeight: 1080
+              }
+            }
+          });
+        } else {
+          stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        }
+
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
         }
         setLocalStream(stream);
         setIsScreenSharing(true);
@@ -308,6 +342,9 @@ export const useWebRTC = (roomId, onNotification) => {
         updatePeerTracks(stream);
       } catch (err) {
         console.error("Error sharing screen:", err);
+        if (onNotification) {
+          onNotification("Échec du partage d'écran : " + err.message);
+        }
       }
     }
   };
