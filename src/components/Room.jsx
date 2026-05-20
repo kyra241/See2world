@@ -147,6 +147,13 @@ export default function Room() {
     const nextMode = !isBrowserMode;
     setIsBrowserMode(nextMode);
     
+    let targetUrl = currentUrl;
+    if (nextMode && !targetUrl) {
+      targetUrl = 'https://www.google.com';
+      setCurrentUrl(targetUrl);
+      setBrowserUrl(targetUrl);
+    }
+    
     if (nextMode) {
       if (!isScreenSharing) {
         try {
@@ -160,7 +167,7 @@ export default function Room() {
         stopMedia();
       }
     }
-    syncBrowser(nextMode, currentUrl);
+    syncBrowser(nextMode, targetUrl);
   };
 
   // Sync address bar input with Electron webview actual navigation changes
@@ -323,7 +330,9 @@ export default function Room() {
           {/* Live Participant Count Pill */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-900 border border-gray-700 rounded-md text-xs text-gray-300 font-semibold shadow-inner">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            <span>{participantCount} participant{participantCount > 1 ? 's' : ''}</span>
+            <span>
+              {participantCount <= 1 ? "1 Hôte" : `1 Hôte, ${participantCount - 1} Participant${participantCount - 1 > 1 ? 's' : ''}`}
+            </span>
           </div>
         </div>
         
@@ -441,7 +450,7 @@ export default function Room() {
              )}
              
              {isHost && isBrowserMode && currentUrl ? (
-                <div className="w-full h-full flex flex-col">
+                <div className="absolute inset-0 flex flex-col">
                   {!ipcRenderer && showWarningBanner && (
                     <div className="bg-yellow-600/95 text-white px-4 py-1.5 text-[11px] text-center font-medium shrink-0 flex items-center justify-between gap-2 shadow-inner">
                       <span className="flex-1 text-center">

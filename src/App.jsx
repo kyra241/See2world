@@ -9,7 +9,7 @@ function Home() {
 
   const createRoom = () => {
     const id = Math.random().toString(36).substring(2, 9);
-    navigate(`/room/${id}`);
+    navigate(`/room/${id}?host=true`);
   };
 
   const joinRoom = (e) => {
