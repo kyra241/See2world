@@ -129,6 +129,27 @@ export default function Room() {
     }, 50);
   };
 
+  const handleToggleBrowserMode = async () => {
+    if (!isHost) return;
+    const nextMode = !isBrowserMode;
+    setIsBrowserMode(nextMode);
+    
+    if (nextMode) {
+      if (!isScreenSharing) {
+        try {
+          await toggleScreenShare();
+        } catch (err) {
+          console.error("Auto screen share failed:", err);
+        }
+      }
+    } else {
+      if (isScreenSharing) {
+        stopMedia();
+      }
+    }
+    syncBrowser(nextMode, currentUrl);
+  };
+
   // Sync address bar input with Electron webview actual navigation changes
   useEffect(() => {
     const webview = webviewRef.current;
@@ -163,20 +184,39 @@ export default function Room() {
     sendMessage,
     socketId,
     browserState,
-    syncBrowser
+    syncBrowser,
+    isHost,
+    participantCount,
+    hostId
   } = useWebRTC(roomId);
 
   // Sync local browser states when receiving updates from other participants
   useEffect(() => {
     if (browserState) {
-      setIsBrowserMode(browserState.isBrowserMode);
+      // Only set local browser mode if we are the host.
+      // Participants will watch the host's WebRTC stream on the video stage instead!
+      if (isHost) {
+        setIsBrowserMode(browserState.isBrowserMode);
+      } else {
+        // Participants stay in standard video stage mode
+        setIsBrowserMode(false);
+      }
+      
       setCurrentUrl(browserState.currentUrl);
       if (browserState.currentUrl) {
         setBrowserUrl(browserState.currentUrl);
-        setShowAddressBar(false); // Masquer la barre d'adresse pour les participants pour le visionnage plein écran !
+        setShowAddressBar(false);
       }
     }
-  }, [browserState]);
+  }, [browserState, isHost]);
+
+  // Turn off browser mode if host stops screen sharing
+  useEffect(() => {
+    if (isHost && isBrowserMode && !isScreenSharing) {
+      setIsBrowserMode(false);
+      syncBrowser(false, currentUrl);
+    }
+  }, [isScreenSharing, isBrowserMode, isHost]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomId);
@@ -204,6 +244,10 @@ export default function Room() {
   if (localStream && isScreenSharing) {
     mainStream = localStream;
     mainIsLocal = true;
+  } else if (hostId && peers[hostId]) {
+    // Prioritize the host's stream for all participants
+    mainStream = peers[hostId];
+    mainIsLocal = false;
   } else if (Object.values(peers).length > 0) {
     mainStream = Object.values(peers)[0];
     mainIsLocal = false;
@@ -258,7 +302,7 @@ export default function Room() {
           {/* Live Participant Count Pill */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-900 border border-gray-700 rounded-md text-xs text-gray-300 font-semibold shadow-inner">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            <span>{Object.keys(peers).length + 1} participant{Object.keys(peers).length + 1 > 1 ? 's' : ''}</span>
+            <span>{participantCount} participant{participantCount > 1 ? 's' : ''}</span>
           </div>
         </div>
         
@@ -314,8 +358,8 @@ export default function Room() {
         {/* Main Video Area */}
         <div className="flex-1 p-4 flex flex-col relative overflow-hidden bg-black gap-2">
           
-          {/* Browser Navigation Bar */}
-          {isBrowserMode && showAddressBar && (
+          {/* Browser Navigation Bar (Host Only) */}
+          {isHost && isBrowserMode && showAddressBar && (
             <div className="h-12 bg-gray-800 rounded-lg flex items-center px-4 gap-3 shrink-0 shadow-md">
               <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
                 <button 
@@ -365,8 +409,8 @@ export default function Room() {
             </div>
           )}
 
-          <div className="flex-1 rounded-xl overflow-hidden relative shadow-lg bg-gray-950 group">
-             {isBrowserMode && !showAddressBar && (
+          <div id="main-video-container" className="flex-1 rounded-xl overflow-hidden relative shadow-lg bg-gray-950 group">
+             {isHost && isBrowserMode && !showAddressBar && (
                 <button 
                   onClick={() => setShowAddressBar(true)}
                   className="absolute top-4 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-gray-800/90 hover:bg-gray-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2 shadow-lg backdrop-blur-sm"
@@ -375,37 +419,91 @@ export default function Room() {
                 </button>
              )}
              
-             {isBrowserMode && currentUrl ? (
-               <div className="w-full h-full flex flex-col">
-                 {!ipcRenderer && showWarningBanner && (
-                   <div className="bg-yellow-600/95 text-white px-4 py-1.5 text-[11px] text-center font-medium shrink-0 flex items-center justify-between gap-2 shadow-inner">
-                     <span className="flex-1 text-center">
-                       ⚠️ Version Web : certains sites bloquent l'affichage par sécurité (X-Frame-Options). Utilisez l'app Desktop pour tout débloquer !
-                     </span>
-                     <button onClick={() => setShowWarningBanner(false)} className="hover:bg-yellow-700 p-0.5 rounded transition-colors shrink-0 text-white" title="Fermer">
-                       <X className="w-3.5 h-3.5" />
-                     </button>
-                   </div>
-                 )}
-                 {ipcRenderer ? (
-                   <webview ref={webviewRef} src={currentUrl} className="w-full h-full border-0 bg-white" allowpopups="true" />
-                 ) : (
-                   <iframe 
-                     src={currentUrl} 
-                     className="w-full h-full border-0 bg-white" 
-                     title="Navigateur Partagé"
-                     sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                   />
-                 )}
-               </div>
+             {isHost && isBrowserMode && currentUrl ? (
+                <div className="w-full h-full flex flex-col">
+                  {!ipcRenderer && showWarningBanner && (
+                    <div className="bg-yellow-600/95 text-white px-4 py-1.5 text-[11px] text-center font-medium shrink-0 flex items-center justify-between gap-2 shadow-inner">
+                      <span className="flex-1 text-center">
+                        ⚠️ Version Web : certains sites bloquent l'affichage par sécurité (X-Frame-Options). Utilisez l'app Desktop pour tout débloquer !
+                      </span>
+                      <button onClick={() => setShowWarningBanner(false)} className="hover:bg-yellow-700 p-0.5 rounded transition-colors shrink-0 text-white" title="Fermer">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {ipcRenderer ? (
+                    <webview ref={webviewRef} src={currentUrl} className="w-full h-full border-0 bg-white" allowpopups="true" />
+                  ) : (
+                    <iframe 
+                      src={currentUrl} 
+                      className="w-full h-full border-0 bg-white" 
+                      title="Navigateur Partagé"
+                      sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                    />
+                  )}
+                </div>
              ) : mainStream ? (
-               <VideoPlayer stream={mainStream} isLocal={mainIsLocal} volume={globalVolume} isMainStage={true} isScreen={isScreenSharing && mainIsLocal} />
+                <div className="w-full h-full relative">
+                  <VideoPlayer stream={mainStream} isLocal={mainIsLocal} volume={globalVolume} isMainStage={true} isScreen={isScreenSharing && mainIsLocal} />
+                  
+                  {/* Badge indicating connection state */}
+                  <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg flex items-center gap-2 border border-gray-800 pointer-events-none select-none">
+                    <span className={`w-2 h-2 rounded-full ${mainIsLocal ? 'bg-blue-500' : 'bg-red-500 animate-pulse'}`}></span>
+                    <span className="text-[11px] font-bold tracking-wide text-gray-200">
+                      {mainIsLocal ? (isScreenSharing ? "MON PARTAGE D'ÉCRAN" : "MA CAMÉRA") : "DIFFUSION DE L'HÔTE (DIRECT)"}
+                    </span>
+                  </div>
+
+                  {/* Premium Overlay controls for participants */}
+                  {!mainIsLocal && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/90 backdrop-blur-md border border-gray-800 rounded-xl px-4 py-2.5 flex items-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 shadow-2xl z-30">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => setGlobalVolume(globalVolume === 0 ? 1 : 0)}
+                          className="text-gray-400 hover:text-white transition-colors"
+                        >
+                          {globalVolume === 0 ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4" />}
+                        </button>
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="1" 
+                          step="0.05" 
+                          value={globalVolume}
+                          onChange={(e) => setGlobalVolume(parseFloat(e.target.value))}
+                          className="w-24 h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <span className="text-[10px] font-mono text-gray-400 w-8 text-right">{Math.round(globalVolume * 100)}%</span>
+                      </div>
+                      
+                      <div className="h-4 w-px bg-gray-800" />
+                      
+                      <button 
+                        onClick={() => {
+                          const container = document.getElementById('main-video-container');
+                          if (container) {
+                            if (document.fullscreenElement) {
+                              document.exitFullscreen();
+                            } else {
+                              container.requestFullscreen();
+                            }
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-gray-800 text-gray-400 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-bold"
+                        title="Agrandir la fenêtre"
+                      >
+                        <Maximize className="w-4 h-4" />
+                        <span>Plein écran</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
              ) : (
-               <div className="absolute inset-0 flex items-center justify-center text-gray-500 flex-col gap-4">
-                 <Monitor className="w-16 h-16 opacity-50" />
-                 <p className="text-lg">En attente de partage d'écran ou de caméra...</p>
-                 <p className="text-sm text-gray-600">Utilisez les contrôles ci-dessous pour démarrer</p>
-               </div>
+                <div className="absolute inset-0 flex items-center justify-center text-gray-500 flex-col gap-4">
+                  <Monitor className="w-16 h-16 opacity-50" />
+                  <p className="text-lg">En attente de partage d'écran ou de caméra...</p>
+                  <p className="text-sm text-gray-600">Utilisez les contrôles ci-dessous pour démarrer</p>
+                </div>
              )}
           </div>
         </div>
@@ -509,25 +607,25 @@ export default function Room() {
             {isVideoEnabled && !isScreenSharing ? <Camera className="w-6 h-6" /> : <CameraOff className="w-6 h-6 text-white" />}
           </button>
 
-          <button 
-            onClick={toggleScreenShare}
-            className={`p-4 rounded-full transition-colors shadow-lg ${isScreenSharing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-            title={isScreenSharing ? "Arrêter le partage" : "Partager l'écran"}
-          >
-            {isScreenSharing ? <VideoOff className="w-6 h-6 text-white" /> : <Monitor className="w-6 h-6" />}
-          </button>
+          {isHost && (
+            <>
+              <button 
+                onClick={toggleScreenShare}
+                className={`p-4 rounded-full transition-colors shadow-lg ${isScreenSharing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                title={isScreenSharing ? "Arrêter le partage" : "Partager l'écran"}
+              >
+                {isScreenSharing ? <VideoOff className="w-6 h-6 text-white" /> : <Monitor className="w-6 h-6" />}
+              </button>
 
-          <button 
-            onClick={() => {
-              const nextMode = !isBrowserMode;
-              setIsBrowserMode(nextMode);
-              syncBrowser(nextMode, currentUrl);
-            }}
-            className={`p-4 rounded-full transition-colors shadow-lg ${isBrowserMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-            title={isBrowserMode ? "Fermer le navigateur" : "Ouvrir un navigateur interne"}
-          >
-            <Globe className="w-6 h-6 text-white" />
-          </button>
+              <button 
+                onClick={handleToggleBrowserMode}
+                className={`p-4 rounded-full transition-colors shadow-lg ${isBrowserMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                title={isBrowserMode ? "Fermer le navigateur" : "Ouvrir un navigateur interne"}
+              >
+                <Globe className="w-6 h-6 text-white" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Right: Empty for balance */}

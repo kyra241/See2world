@@ -15,51 +15,88 @@ const io = new Server(server, {
   }
 });
 
+// Track rooms: { roomId: { hostId, participants: Set<socketId> } }
+const rooms = new Map();
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
-    console.log(`User ${socket.id} joined room ${roomId}`);
-    // Notify other users in the room
+
+    // Initialize room if it doesn't exist — first joiner is the host
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, { hostId: socket.id, participants: new Set() });
+    }
+    const room = rooms.get(roomId);
+    room.participants.add(socket.id);
+
+    const isHost = room.hostId === socket.id;
+    const participantCount = room.participants.size;
+
+    console.log(`User ${socket.id} joined room ${roomId} (host: ${isHost}, count: ${participantCount})`);
+
+    // Send room info to the newly joined user
+    socket.emit('room-info', {
+      hostId: room.hostId,
+      isHost,
+      participantCount
+    });
+
+    // Notify all other users in the room of the new count
+    socket.to(roomId).emit('room-count', { participantCount });
+
+    // Notify other users that a new peer connected (for WebRTC)
     socket.to(roomId).emit('user-connected', socket.id);
   });
 
   // WebRTC Signaling: Offer
   socket.on('offer', (payload) => {
-    // payload: { target: socketId, caller: socketId, sdp: RTCSessionDescription }
     io.to(payload.target).emit('offer', payload);
   });
 
   // WebRTC Signaling: Answer
   socket.on('answer', (payload) => {
-    // payload: { target: socketId, caller: socketId, sdp: RTCSessionDescription }
     io.to(payload.target).emit('answer', payload);
   });
 
   // WebRTC Signaling: ICE Candidate
   socket.on('ice-candidate', (payload) => {
-    // payload: { target: socketId, caller: socketId, candidate: RTCIceCandidate }
     io.to(payload.target).emit('ice-candidate', payload);
   });
 
-  // Chat message
+  // Chat message — broadcast to others only (sender adds locally)
   socket.on('chat-message', (payload) => {
-    // payload: { roomId: string, sender: string, text: string, timestamp: number }
     socket.to(payload.roomId).emit('chat-message', payload);
   });
 
-  // Browser synchronization
+  // Browser synchronization (URL + mode)
   socket.on('browser-sync', (payload) => {
-    // payload: { roomId: string, isBrowserMode: boolean, currentUrl: string }
     socket.to(payload.roomId).emit('browser-sync', payload);
   });
 
   socket.on('disconnecting', () => {
-    // Notify all rooms the user is in
-    for (const room of socket.rooms) {
-      if (room !== socket.id) {
-        socket.to(room).emit('user-disconnected', socket.id);
+    for (const roomId of socket.rooms) {
+      if (roomId === socket.id) continue;
+
+      const room = rooms.get(roomId);
+      if (!room) continue;
+
+      room.participants.delete(socket.id);
+
+      if (room.participants.size === 0) {
+        // Empty room — clean up
+        rooms.delete(roomId);
+      } else {
+        // If host left, assign a new host
+        if (room.hostId === socket.id) {
+          room.hostId = [...room.participants][0];
+          io.to(roomId).emit('host-changed', { newHostId: room.hostId });
+        }
+        // Notify others of updated count and disconnection
+        const participantCount = room.participants.size;
+        socket.to(roomId).emit('user-disconnected', socket.id);
+        socket.to(roomId).emit('room-count', { participantCount });
       }
     }
   });
