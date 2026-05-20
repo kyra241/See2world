@@ -21,6 +21,10 @@ export const useWebRTC = (roomId) => {
   // State for browser synchronization
   const [browserState, setBrowserState] = useState({ isBrowserMode: false, currentUrl: '' });
 
+  const [isHost, setIsHost] = useState(false);
+  const [participantCount, setParticipantCount] = useState(1);
+  const [hostId, setHostId] = useState(null);
+
   const socketRef = useRef();
   const peersRef = useRef({});
   const localStreamRef = useRef(localStream);
@@ -39,6 +43,25 @@ export const useWebRTC = (roomId) => {
       console.log('Connected to signaling server');
       setSocketId(socketRef.current.id);
       socketRef.current.emit('join-room', roomId);
+    });
+
+    socketRef.current.on('room-info', (data) => {
+      console.log('Received room-info:', data);
+      setIsHost(data.isHost);
+      setParticipantCount(data.participantCount);
+      setHostId(data.hostId);
+    });
+
+    socketRef.current.on('room-count', (data) => {
+      console.log('Received room-count:', data);
+      setParticipantCount(data.participantCount);
+    });
+
+    socketRef.current.on('host-changed', (data) => {
+      console.log('Host changed:', data);
+      const amIHost = socketRef.current.id === data.newHostId;
+      setIsHost(amIHost);
+      setHostId(data.newHostId);
     });
 
     socketRef.current.on('user-connected', async (userId) => {
@@ -297,6 +320,9 @@ export const useWebRTC = (roomId) => {
     sendMessage,
     socketId,
     browserState,
-    syncBrowser
+    syncBrowser,
+    isHost,
+    participantCount,
+    hostId
   };
 };
