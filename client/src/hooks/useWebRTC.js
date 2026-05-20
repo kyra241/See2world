@@ -10,7 +10,7 @@ const ICE_SERVERS = {
   ]
 };
 
-export const useWebRTC = (roomId, onNotification) => {
+export const useWebRTC = (roomId, onNotification, isCreator = false) => {
   const [peers, setPeers] = useState({});
   const [localStream, setLocalStream] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -44,13 +44,6 @@ export const useWebRTC = (roomId, onNotification) => {
     socketRef.current.on('connect', () => {
       console.log('Connected to signaling server');
       setSocketId(socketRef.current.id);
-      
-      // Parse query params from hash router or search query
-      const hashParts = window.location.hash.split('?');
-      const queryString = hashParts[1] || window.location.search;
-      const queryParams = new URLSearchParams(queryString);
-      const isCreator = queryParams.get('host') === 'true';
-      
       console.log(`Joining room ${roomId} (isCreator: ${isCreator})`);
       socketRef.current.emit('join-room', { roomId, isCreator });
     });
@@ -75,6 +68,13 @@ export const useWebRTC = (roomId, onNotification) => {
       if (onNotification) {
         onNotification(amIHost ? "Vous êtes maintenant l'hôte de la salle !" : "Un nouvel hôte a été désigné.");
       }
+    });
+
+    socketRef.current.on('room-not-found', () => {
+      if (onNotification) {
+        onNotification("❌ Salle introuvable. Vérifiez le code et réessayez.");
+      }
+      setTimeout(() => window.history.back(), 2000);
     });
 
     socketRef.current.on('user-connected', async (userId) => {
@@ -172,8 +172,6 @@ export const useWebRTC = (roomId, onNotification) => {
     });
 
     socketRef.current.on('chat-message', (payload) => {
-      // Éviter les doublons de messages pour l'expéditeur
-      if (payload.sender === socketRef.current.id) return;
       setMessages((prev) => [...prev, payload]);
     });
 
@@ -188,7 +186,7 @@ export const useWebRTC = (roomId, onNotification) => {
       socketRef.current.disconnect();
       Object.values(peersRef.current).forEach(peer => peer.close());
     };
-  }, [roomId]);
+  }, [roomId, isCreator]);
 
   const createPeerConnection = (userId) => {
     const peerConnection = new RTCPeerConnection(ICE_SERVERS);
@@ -363,15 +361,16 @@ export const useWebRTC = (roomId, onNotification) => {
     if (!socketRef.current) return;
     const payload = {
       roomId,
-      sender: socketRef.current.id || 'me',
+      sender: socketRef.current.id,
+      senderLabel: 'Moi',
       text,
       timestamp: Date.now()
     };
     
-    // Afficher localement immédiatement pour le destinataire
+    // Add locally for the sender immediately
     setMessages((prev) => [...prev, payload]);
     
-    // Envoyer aux autres participants de la salle
+    // Broadcast to others (server uses socket.to so sender won't get it back)
     socketRef.current.emit('chat-message', payload);
   };
 

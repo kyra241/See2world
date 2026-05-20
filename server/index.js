@@ -5,8 +5,12 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const server = http.createServer(app);
+
+// Health check
+app.get('/', (req, res) => res.json({ status: 'ok', service: 'see2world-signaling' }));
 
 const io = new Server(server, {
   cors: {
@@ -31,31 +35,38 @@ io.on('connection', (socket) => {
       isCreator = false;
     }
 
+    // --- Room validation ---
+    // A participant (non-creator) cannot join a room that doesn't exist yet
+    if (!isCreator && !rooms.has(roomId)) {
+      socket.emit('room-not-found', { roomId });
+      console.log(`User ${socket.id} tried to join non-existent room ${roomId} — rejected.`);
+      return;
+    }
+
     socket.join(roomId);
 
-    // Get active sockets in the room from the socket.io adapter
+    // Get active sockets after joining
     const activeSockets = io.sockets.adapter.rooms.get(roomId);
     const participants = activeSockets ? Array.from(activeSockets) : [socket.id];
 
-    // If the room doesn't exist in our map, assign the joining socket as the host
+    // If the room doesn't exist in our map yet, this is the creator opening it
     if (!rooms.has(roomId)) {
       rooms.set(roomId, { hostId: socket.id });
-    } else {
-      const room = rooms.get(roomId);
-      // If the creator joins and the current host is no longer in the room, reassign to creator
-      if (isCreator && !participants.includes(room.hostId)) {
-        room.hostId = socket.id;
-      }
     }
-    
+
     const room = rooms.get(roomId);
 
-    // Verify if the current host is actually in the room, else fallback to the first active socket
+    // If creator is joining and the current host is gone, reassign to creator
+    if (isCreator && !participants.includes(room.hostId)) {
+      room.hostId = socket.id;
+    }
+
+    // Safety: if host is no longer in the room, fallback to first participant
     if (!participants.includes(room.hostId)) {
       room.hostId = participants[0] || socket.id;
     }
 
-    // Force host status if the creator is the only one in the room
+    // If creator is alone in the room, they are definitively the host
     if (isCreator && participants.length === 1) {
       room.hostId = socket.id;
     }
@@ -63,19 +74,15 @@ io.on('connection', (socket) => {
     const isHost = room.hostId === socket.id;
     const participantCount = participants.length;
 
-    console.log(`User ${socket.id} joined room ${roomId} (host: ${room.hostId}, isHost: ${isHost}, count: ${participantCount}, isCreator: ${isCreator})`);
+    console.log(`User ${socket.id} joined room ${roomId} — isHost: ${isHost}, count: ${participantCount}, isCreator: ${isCreator}`);
 
     // Send room-info to the joining user
-    socket.emit('room-info', {
-      hostId: room.hostId,
-      isHost,
-      participantCount
-    });
+    socket.emit('room-info', { hostId: room.hostId, isHost, participantCount });
 
-    // Notify all participants in the room of the updated count
+    // Broadcast updated count to everyone in the room
     io.to(roomId).emit('room-count', { participantCount });
 
-    // Notify all other participants that a user connected (for WebRTC)
+    // Notify other peers (for WebRTC negotiation)
     socket.to(roomId).emit('user-connected', socket.id);
   });
 

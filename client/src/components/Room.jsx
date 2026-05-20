@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { Monitor, Camera, CameraOff, Mic, MicOff, VideoOff, MessageSquare, Send, Copy, LogOut, Volume2, VolumeX, EyeOff, Eye, Globe, Maximize, Minus, Square, X, ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
 
@@ -34,6 +34,10 @@ const VideoPlayer = ({ stream, isLocal, volume, isMainStage = false, isScreen = 
 export default function Room() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Determine host role from URL query param — set once at mount
+  const isCreator = new URLSearchParams(location.search).get('host') === 'true';
   const [chatOpen, setChatOpen] = useState(false);
   const [showCameras, setShowCameras] = useState(true);
   const [chatText, setChatText] = useState('');
@@ -208,7 +212,7 @@ export default function Room() {
     isHost,
     participantCount,
     hostId
-  } = useWebRTC(roomId, triggerNotification);
+  } = useWebRTC(roomId, triggerNotification, isCreator);
 
   // Sync local browser states when receiving updates from other participants
   useEffect(() => {
