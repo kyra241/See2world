@@ -50,6 +50,19 @@ export default function Room() {
   const [browserHistory, setBrowserHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const webviewRef = useRef(null);
+  
+  const [notification, setNotification] = useState(null);
+  const notificationTimeoutRef = useRef(null);
+
+  const triggerNotification = (text) => {
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current);
+    }
+    setNotification(text);
+    notificationTimeoutRef.current = setTimeout(() => {
+      setNotification(null);
+    }, 4000);
+  };
 
   const navigateToUrl = (url) => {
     let formattedUrl = url.trim();
@@ -188,7 +201,7 @@ export default function Room() {
     isHost,
     participantCount,
     hostId
-  } = useWebRTC(roomId);
+  } = useWebRTC(roomId, triggerNotification);
 
   // Sync local browser states when receiving updates from other participants
   useEffect(() => {
@@ -266,6 +279,14 @@ export default function Room() {
       {copyToast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium flex items-center gap-2 animate-bounce">
           <Copy className="w-4 h-4" /> Code copié !
+        </div>
+      )}
+
+      {/* Notification de salle */}
+      {notification && (
+        <div className="fixed top-5 right-5 z-50 bg-blue-600/95 backdrop-blur-md text-white px-5 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-3 border border-blue-500/30 animate-pulse">
+          <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></div>
+          <span>{notification}</span>
         </div>
       )}
 
@@ -509,7 +530,7 @@ export default function Room() {
         </div>
 
         {/* Cameras Sidebar (Minimalist) */}
-        {showCameras && hasSideCameras && (
+        {showCameras && (
           <div className="w-48 sm:w-56 bg-gray-900 border-l border-gray-800 flex flex-col shrink-0 overflow-y-auto p-4 gap-4 z-10 shadow-xl transition-all">
              
              {localStream && !mainIsLocal && (
@@ -523,15 +544,23 @@ export default function Room() {
              )}
 
              {Object.entries(peers).map(([peerId, stream]) => {
-               if (stream === mainStream) return null;
+                if (stream === mainStream) return null;
 
-               return (
-                 <div key={peerId} className="w-full aspect-video bg-black rounded-lg overflow-hidden relative shrink-0 border border-gray-700">
-                   <VideoPlayer stream={stream} isLocal={false} volume={globalVolume} />
-                   <div className="absolute bottom-1 left-1 bg-black/60 px-2 py-0.5 text-[10px] rounded font-medium">Participant</div>
-                 </div>
-               )
+                return (
+                  <div key={peerId} className="w-full aspect-video bg-black rounded-lg overflow-hidden relative shrink-0 border border-gray-700">
+                    <VideoPlayer stream={stream} isLocal={false} volume={globalVolume} />
+                    <div className="absolute bottom-1 left-1 bg-black/60 px-2 py-0.5 text-[10px] rounded font-medium">Participant</div>
+                  </div>
+                )
              })}
+
+             {/* Fallback if no streams are displayed in the sidebar */}
+             {!(localStream && !mainIsLocal) && Object.entries(peers).filter(([_, s]) => s !== mainStream).length === 0 && (
+               <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 px-2 gap-2 border border-dashed border-gray-800 rounded-lg">
+                 <Camera className="w-6 h-6 opacity-30" />
+                 <p className="text-xs">Aucune webcam active</p>
+               </div>
+             )}
           </div>
         )}
 

@@ -8,7 +8,7 @@ const ICE_SERVERS = {
   ]
 };
 
-export const useWebRTC = (roomId) => {
+export const useWebRTC = (roomId, onNotification) => {
   const [peers, setPeers] = useState({});
   const [localStream, setLocalStream] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -62,46 +62,70 @@ export const useWebRTC = (roomId) => {
       const amIHost = socketRef.current.id === data.newHostId;
       setIsHost(amIHost);
       setHostId(data.newHostId);
+      if (onNotification) {
+        onNotification(amIHost ? "Vous êtes maintenant l'hôte de la salle !" : "Un nouvel hôte a été désigné.");
+      }
     });
 
     socketRef.current.on('user-connected', async (userId) => {
-      const peerConnection = createPeerConnection(userId);
-      peersRef.current[userId] = peerConnection;
+      console.log('User connected socket event:', userId);
+      let peerConnection = peersRef.current[userId];
+      if (!peerConnection) {
+        peerConnection = createPeerConnection(userId);
+        peersRef.current[userId] = peerConnection;
+      }
+
+      if (onNotification) {
+        onNotification("Un participant a rejoint la salle !");
+      }
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
           peerConnection.addTrack(track, localStreamRef.current);
         });
+      } else {
+        // If we don't have a local stream, trigger the initial negotiation manually
+        try {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          socketRef.current.emit('offer', {
+            target: userId,
+            caller: socketRef.current.id,
+            sdp: peerConnection.localDescription
+          });
+        } catch (err) {
+          console.error('Error creating initial offer:', err);
+        }
       }
-
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      socketRef.current.emit('offer', {
-        target: userId,
-        caller: socketRef.current.id,
-        sdp: peerConnection.localDescription
-      });
     });
 
     socketRef.current.on('offer', async (payload) => {
-      const peerConnection = createPeerConnection(payload.caller);
-      peersRef.current[payload.caller] = peerConnection;
+      console.log('Received offer socket event from:', payload.caller);
+      let peerConnection = peersRef.current[payload.caller];
+      if (!peerConnection) {
+        peerConnection = createPeerConnection(payload.caller);
+        peersRef.current[payload.caller] = peerConnection;
 
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStreamRef.current);
-        });
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStreamRef.current);
+          });
+        }
       }
 
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
 
-      socketRef.current.emit('answer', {
-        target: payload.caller,
-        caller: socketRef.current.id,
-        sdp: peerConnection.localDescription
-      });
+        socketRef.current.emit('answer', {
+          target: payload.caller,
+          caller: socketRef.current.id,
+          sdp: peerConnection.localDescription
+        });
+      } catch (err) {
+        console.error('Error handling offer:', err);
+      }
     });
 
     socketRef.current.on('answer', async (payload) => {
@@ -131,6 +155,9 @@ export const useWebRTC = (roomId) => {
           delete newPeers[userId];
           return newPeers;
         });
+      }
+      if (onNotification) {
+        onNotification("Un participant a quitté la salle.");
       }
     });
 
@@ -167,10 +194,26 @@ export const useWebRTC = (roomId) => {
     };
 
     peerConnection.ontrack = (event) => {
+      console.log('Received track from peer:', userId, event.streams[0]);
       setPeers((prev) => ({
         ...prev,
         [userId]: event.streams[0]
       }));
+    };
+
+    peerConnection.onnegotiationneeded = async () => {
+      try {
+        console.log('Negotiation needed for peer:', userId);
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socketRef.current.emit('offer', {
+          target: userId,
+          caller: socketRef.current.id,
+          sdp: peerConnection.localDescription
+        });
+      } catch (err) {
+        console.error('onnegotiationneeded error:', err);
+      }
     };
 
     return peerConnection;
