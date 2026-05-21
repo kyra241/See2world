@@ -1,0 +1,56 @@
+name: Deploy Server to Bonto
+
+on:
+  push:
+    branches:
+      - server
+
+jobs:
+  deploy:
+    name: Deploy server via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install server dependencies (optional)
+        working-directory: server
+        run: npm ci
+
+      - name: Prepare SSH key
+        env:
+          BONTO_SSH_KEY: ${{ secrets.BONTO_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$BONTO_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Set BONTO host defaults
+        run: |
+          # Use secret BONTO_HOST if set, otherwise fallback to see2world.bonto.run
+          if [ -z "${{ secrets.BONTO_HOST }}" ]; then
+            echo "BONTO_HOST=see2world.bonto.run" >> $GITHUB_ENV
+          else
+            echo "BONTO_HOST=${{ secrets.BONTO_HOST }}" >> $GITHUB_ENV
+          fi
+          echo "BONTO_USER=${{ secrets.BONTO_USER }}" >> $GITHUB_ENV
+          echo "BONTO_DEPLOY_PATH=${{ secrets.BONTO_DEPLOY_PATH }}" >> $GITHUB_ENV
+
+      - name: Add remote host to known_hosts
+        run: ssh-keyscan -H "$BONTO_HOST" >> ~/.ssh/known_hosts || true
+
+      - name: Sync server to remote via rsync
+        run: |
+          rsync -avz --delete -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" server/ "$BONTO_USER@$BONTO_HOST:$BONTO_DEPLOY_PATH/"
+
+      - name: Remote install & restart service
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no "$BONTO_USER@$BONTO_HOST" "cd $BONTO_DEPLOY_PATH && npm ci --production && pm2 restart see2world || pm2 start server/index.js --name see2world"
