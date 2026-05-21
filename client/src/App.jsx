@@ -14,9 +14,13 @@ function Home() {
 
   const joinRoom = (e) => {
     e.preventDefault();
-    if (roomId.trim()) {
-      navigate(`/room/${roomId}`);
+    const normalized = roomId.trim();
+    if (!normalized) return;
+    if (!/^[-A-Za-z0-9_]{3,64}$/.test(normalized)) {
+      alert('Code invalide : utilisez seulement des lettres, chiffres, tirets ou underscores (3-64 caractères).');
+      return;
     }
+    navigate(`/room/${normalized}`);
   };
 
   return (
@@ -33,9 +37,10 @@ function Home() {
         <div className="space-y-4">
           <button
             onClick={createRoom}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800 transition-colors"
+            className="w-full flex flex-col items-center justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-800 transition-colors"
           >
-            Créer une nouvelle salle
+            <span>Créer une nouvelle salle</span>
+            <small className="text-[11px] text-gray-200 mt-1">Vous serez l'hôte/admin de la salle</small>
           </button>
 
           <div className="relative">

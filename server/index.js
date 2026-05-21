@@ -35,6 +35,13 @@ io.on('connection', (socket) => {
       isCreator = false;
     }
 
+    // Validate roomId format (simple alphanumeric check)
+    if (!roomId || typeof roomId !== 'string' || !/^[-A-Za-z0-9_]{3,64}$/.test(roomId)) {
+      socket.emit('room-not-found', { roomId });
+      console.log(`User ${socket.id} provided invalid room id ${roomId} — rejected.`);
+      return;
+    }
+
     // --- Room validation ---
     // A participant (non-creator) cannot join a room that doesn't exist yet
     if (!isCreator && !rooms.has(roomId)) {
@@ -73,11 +80,12 @@ io.on('connection', (socket) => {
 
     const isHost = room.hostId === socket.id;
     const participantCount = participants.length;
+    const role = isHost ? 'host' : 'participant';
 
-    console.log(`User ${socket.id} joined room ${roomId} — isHost: ${isHost}, count: ${participantCount}, isCreator: ${isCreator}`);
+    console.log(`User ${socket.id} joined room ${roomId} — isHost: ${isHost}, count: ${participantCount}, role: ${role}, isCreator: ${isCreator}`);
 
     // Send room-info to the joining user
-    socket.emit('room-info', { hostId: room.hostId, isHost, participantCount });
+    socket.emit('room-info', { hostId: room.hostId, isHost, participantCount, role });
 
     // Broadcast updated count to everyone in the room
     io.to(roomId).emit('room-count', { participantCount });

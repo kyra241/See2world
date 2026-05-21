@@ -211,7 +211,8 @@ export default function Room() {
     syncBrowser,
     isHost,
     participantCount,
-    hostId
+    hostId,
+    role
   } = useWebRTC(roomId, triggerNotification, isCreator);
 
   // Sync local browser states when receiving updates from other participants
@@ -337,6 +338,10 @@ export default function Room() {
             <span>
               {participantCount <= 1 ? "1 Hôte" : `1 Hôte, ${participantCount - 1} Participant${participantCount - 1 > 1 ? 's' : ''}`}
             </span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-900 border border-gray-700 rounded-md text-xs text-gray-300 font-semibold shadow-inner">
+            <span className={`w-1.5 h-1.5 rounded-full ${isHost ? 'bg-blue-400' : 'bg-gray-500'}`}></span>
+            <span>{isHost ? 'Vous êtes l’hôte' : 'Vous êtes participant'}</span>
           </div>
         </div>
         

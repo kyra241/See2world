@@ -1,0 +1,36 @@
+name: Deploy Frontend to Netlify
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build and deploy client
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build client
+        working-directory: client
+        run: npm run build
+
+      - name: Deploy to Netlify
+        uses: netlify/actions/cli@v3
+        with:
+          args: deploy --dir=client/dist --prod --site=$NETLIFY_SITE_ID --message="Netlify auto-deploy from main"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL }}

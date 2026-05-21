@@ -56,12 +56,23 @@ L'installeur sera généré dans `client/release/`.
 ## 🌐 Déploiement
 
 - **Frontend** → [Netlify](https://netlify.com) (dossier `client`, build: `npm run build`, publish: `dist`)
-- **Serveur** → [Render.com](https://render.com) (dossier `server`, start: `npm start`)
+- **Serveur** → [bonto.dev](https://bonto.dev) ou autre hébergeur Node.js (dossier `server`, start: `npm start`)
 
-Configurer la variable d'environnement sur Netlify :
-```
-VITE_SERVER_URL=https://VOTRE_URL_RENDER.onrender.com
-```
+Un workflow GitHub Actions a été ajouté dans `.github/workflows/netlify-deploy.yml` pour déployer automatiquement le frontend lorsque la branche `main` est mise à jour.
+
+### Configuration Netlify
+
+1. Ajouter ces secrets dans votre dépôt GitHub :
+   - `NETLIFY_AUTH_TOKEN`
+   - `NETLIFY_SITE_ID`
+   - `VITE_SERVER_URL` (exemple : `https://see2world.bonto.run`)
+
+2. Si votre site Netlify est déjà connecté au dépôt, la branche `main` déclenchera automatiquement le déploiement.
+
+### Configuration du serveur
+
+- Le frontend en production pointe par défaut vers `https://see2world.bonto.run`.
+- Si vous utilisez un autre hébergeur pour le backend, définissez `VITE_SERVER_URL` dans les secrets GitHub ou dans l'environnement de Netlify.
 
 ## 🛠️ Stack technique
 

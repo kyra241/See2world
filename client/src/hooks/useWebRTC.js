@@ -23,13 +23,16 @@ export const useWebRTC = (roomId, onNotification, isCreator = false) => {
   // State for browser synchronization
   const [browserState, setBrowserState] = useState({ isBrowserMode: false, currentUrl: '' });
 
-  const [isHost, setIsHost] = useState(false);
+  // Start with creator assumed host until server confirms otherwise
+  const [isHost, setIsHost] = useState(isCreator);
   const [participantCount, setParticipantCount] = useState(1);
   const [hostId, setHostId] = useState(null);
+  const [role, setRole] = useState(isCreator ? 'host' : 'participant');
 
   const socketRef = useRef();
   const peersRef = useRef({});
   const localStreamRef = useRef(localStream);
+  const pendingMessagesRef = useRef([]);
 
   // Sync the ref with the state so we always have the latest localStream
   useEffect(() => {
@@ -50,9 +53,17 @@ export const useWebRTC = (roomId, onNotification, isCreator = false) => {
 
     socketRef.current.on('room-info', (data) => {
       console.log('Received room-info:', data);
+      // Server is authoritative about host assignment
       setIsHost(data.isHost);
       setParticipantCount(data.participantCount);
       setHostId(data.hostId);
+      setRole(data.role || (data.isHost ? 'host' : 'participant'));
+
+      // Flush any pending chat messages queued while connecting
+      if (pendingMessagesRef.current.length > 0) {
+        pendingMessagesRef.current.forEach(m => setMessages(prev => [...prev, m]));
+        pendingMessagesRef.current = [];
+      }
     });
 
     socketRef.current.on('room-count', (data) => {
@@ -65,6 +76,7 @@ export const useWebRTC = (roomId, onNotification, isCreator = false) => {
       const amIHost = socketRef.current.id === data.newHostId;
       setIsHost(amIHost);
       setHostId(data.newHostId);
+      setRole(amIHost ? 'host' : 'participant');
       if (onNotification) {
         onNotification(amIHost ? "Vous êtes maintenant l'hôte de la salle !" : "Un nouvel hôte a été désigné.");
       }
@@ -358,7 +370,20 @@ export const useWebRTC = (roomId, onNotification, isCreator = false) => {
   }, [localStream]);
 
   const sendMessage = (text) => {
-    if (!socketRef.current) return;
+    if (!socketRef.current || !socketRef.current.connected) {
+      // If not yet connected, queue messages locally to show them when we reconnect
+      const payload = {
+        roomId,
+        sender: 'local',
+        senderLabel: 'Moi',
+        text,
+        timestamp: Date.now()
+      };
+      pendingMessagesRef.current.push(payload);
+      setMessages((prev) => [...prev, payload]);
+      return;
+    }
+
     const payload = {
       roomId,
       sender: socketRef.current.id,
@@ -402,6 +427,7 @@ export const useWebRTC = (roomId, onNotification, isCreator = false) => {
     syncBrowser,
     isHost,
     participantCount,
-    hostId
+    hostId,
+    role
   };
 };
